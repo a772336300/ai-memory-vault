@@ -43,6 +43,7 @@ or:
 - `registry.yaml` — index of global assets, projects, skills, and patterns.
 - `skills/vault-maintainer/SKILL.md` — global AI skill that tells agents how to maintain and claim the vault.
 - `scripts/ai-vault.js` — lightweight helper CLI for scanning, claiming, exporting, and validating.
+- `docs/BORROWED_IDEAS.md` — roadmap of useful patterns borrowed from adjacent open-source memory/skill projects.
 
 ## CLI behavior
 
