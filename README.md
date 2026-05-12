@@ -46,6 +46,7 @@ or:
 - `skills/vault-maintainer/SKILL.md` — global AI skill that tells agents how to maintain and claim the vault.
 - `scripts/ai-vault.js` — lightweight helper CLI for scanning, claiming, exporting, and validating.
 - `docs/BORROWED_IDEAS.md` — roadmap of useful patterns borrowed from adjacent open-source memory/skill projects.
+- `docs/GITNEXUS_IDEAS.md` — GitNexus-inspired roadmap for asset graph, impact, status, map, and safe promotion workflows.
 
 ## CLI behavior
 
