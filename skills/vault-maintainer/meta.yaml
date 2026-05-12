@@ -1,0 +1,7 @@
+id: vault-maintainer
+scope: global
+tags: [vault, memory, sync, claim, export, claude-code]
+install:
+  claude_code:
+    copy: skills/vault-maintainer/SKILL.md
+    to: ~/.claude/skills/vault-maintainer/SKILL.md

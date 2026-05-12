@@ -1,0 +1,5 @@
+id: claude-code-memory
+scope: both
+tags: [claude-code, memory, migration, claim]
+match:
+  files: [CLAUDE.md, .claude]

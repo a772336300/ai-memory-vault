@@ -1,0 +1,59 @@
+version: 1
+vault:
+  name: ai-memory-vault
+  description: AI-maintained development memory, skill, and workflow vault.
+  protocol: VAULT_PROTOCOL.md
+
+global_assets:
+  - id: global-instructions
+    type: global
+    title: Global AI instructions
+    path: global/instructions.md
+    scope: global
+    tags: [agent, instructions, behavior]
+  - id: coding-style
+    type: global
+    title: Coding style and verification rules
+    path: global/coding-style.md
+    scope: both
+    tags: [coding, testing, quality]
+  - id: user-preferences
+    type: global
+    title: User preferences
+    path: global/user-preferences.md
+    scope: global
+    tags: [preferences, user]
+
+skills:
+  - id: vault-maintainer
+    type: skill
+    title: AI Memory Vault Maintainer
+    path: skills/vault-maintainer/SKILL.md
+    scope: global
+    tags: [vault, memory, sync, claim, export]
+    match:
+      keywords: [vault, memory, summarize, claim, restore, sync]
+  - id: claude-code-memory
+    type: skill
+    title: Claude Code memory migration and claiming
+    path: skills/claude-code-memory/SKILL.md
+    scope: both
+    tags: [claude-code, memory, migration]
+    match:
+      files: [CLAUDE.md, .claude]
+
+patterns:
+  - id: debugging-patterns
+    type: pattern
+    title: Debugging patterns
+    path: patterns/debugging/README.md
+    scope: both
+    tags: [debugging, bugs]
+  - id: deployment-patterns
+    type: pattern
+    title: Deployment patterns
+    path: patterns/deployment/README.md
+    scope: both
+    tags: [deploy, docker, ci]
+
+projects: []

@@ -1,0 +1,23 @@
+{
+  "name": "ai-memory-vault",
+  "version": "0.1.0",
+  "description": "AI-maintained development memory vault for Claude Code, OpenClaw, Codex and other coding agents.",
+  "type": "module",
+  "bin": {
+    "ai-vault": "./scripts/ai-vault.js"
+  },
+  "scripts": {
+    "scan": "node scripts/ai-vault.js scan",
+    "claim": "node scripts/ai-vault.js claim",
+    "export": "node scripts/ai-vault.js export",
+    "validate": "node scripts/ai-vault.js validate"
+  },
+  "keywords": [
+    "claude-code",
+    "ai-memory",
+    "developer-tools",
+    "skills",
+    "agents"
+  ],
+  "license": "MIT"
+}

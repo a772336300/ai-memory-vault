@@ -1,0 +1,7 @@
+install:
+  project:
+    claude_code:
+      memory: .claude/MEMORY.md
+      skills_dir: .claude/skills
+    generic:
+      claim_record: .ai-memory/claimed-assets.json
