@@ -28,10 +28,13 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
    - `claim`: install matched skills, write a compact project memory marker, and record claimed asset hashes.
    - `export`: create a draft project memory directory and private registry entry.
    - `summarize`: stage a non-destructive proposal and paired session summary in `inbox/`.
+   - `promote`: append reviewed proposal memory into durable project memory and archive the proposal.
    - `context`: print compact startup context for an agent without loading full assets.
    - `status`: compare project claim manifests with current vault asset hashes.
-   - `sync`: perform the Git-backed recovery loop: pull, validate, claim, status.
+   - `sync`: perform the Git-backed recovery loop: pull, validate, claim, status; `claim` also writes `.ai-memory/sync-manifest.json`.
    - `list-assets` / `asset`: progressive disclosure over vault assets.
+   - `index` / `search`: lightweight file index and local retrieval without a database.
+   - `install-adapter`: write Claude Code, Codex, OpenClaw, or Cursor adapter hints into a project.
    - `impact` / `map`: lightweight asset graph inspection inspired by GitNexus.
    - `validate`: check required files, registry paths, scopes/visibility, CLI wiring, skill metadata, GitHub workflow wiring, and obvious secret patterns.
    - `test`: exercise scan, claim, export, and validation failure behavior.
@@ -54,8 +57,10 @@ GitHub vault
 local project .claude/MEMORY.md + .claude/skills
   → ai-vault summarize
 inbox proposal
-  → AI review + promote
+  → AI review + ai-vault promote
 GitHub vault
+  → ai-vault index/search/status
+agent startup context
 ```
 
 This avoids syncing raw Claude/Codex caches directly while preserving portable working memory.

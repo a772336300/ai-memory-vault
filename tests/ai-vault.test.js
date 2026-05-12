@@ -67,6 +67,7 @@ test('claim uses registry match rules for docker and claude assets', () => {
   const root = tempDir();
   const project = path.join(root, 'docker-app');
   fs.mkdirSync(path.join(project, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(project, '.claude', 'MEMORY.md'), '# User Claude Memory\n');
   writeJson(path.join(project, 'package.json'), { name: 'docker-app', dependencies: {} });
   fs.writeFileSync(path.join(project, 'Dockerfile'), 'FROM node:22\n');
 
@@ -195,6 +196,62 @@ test('sync dry-run describes pull validate claim status workflow', () => {
   assert.match(output, /git pull --ff-only/);
   assert.match(output, /ai-vault claim/);
   assert.match(output, /ai-vault status/);
+});
+
+
+
+test('index and search provide lightweight retrieval', () => {
+  const index = JSON.parse(run(['index', '--json']));
+  assert.ok(index.entries.some(entry => entry.path === 'VAULT_PROTOCOL.md'));
+  assert.ok(index.entries.every(entry => entry.sha256 || entry.tokens));
+
+  const results = JSON.parse(run(['search', 'vault protocol', '--json']));
+  assert.ok(results.some(result => result.path === 'VAULT_PROTOCOL.md'));
+});
+
+test('promote moves proposal into durable project memory', () => {
+  const proposal = path.join(repoRoot, 'inbox', 'proposals', `test-promote-${Date.now()}.md`);
+  const projectId = `test-promote-${Date.now()}`;
+  const projectDir = path.join(repoRoot, 'projects', projectId);
+  const registryPath = path.join(repoRoot, 'registry.yaml');
+  const originalRegistry = fs.readFileSync(registryPath, 'utf8');
+  fs.mkdirSync(path.dirname(proposal), { recursive: true });
+  fs.writeFileSync(proposal, `# Proposal\n\n- Project ID: ${projectId}\n\n## Proposed durable memory\n\n- Keep this promoted lesson.\n\n## Promotion target\n\nprojects/${projectId}/memory.md\n`);
+
+  try {
+    const output = run(['promote', path.relative(repoRoot, proposal)]);
+    assert.match(output, /Promoted proposal/);
+    const memory = fs.readFileSync(path.join(projectDir, 'memory.md'), 'utf8');
+    assert.match(memory, /Keep this promoted lesson/);
+    assert.ok(fs.existsSync(path.join(repoRoot, 'inbox', 'promoted', path.basename(proposal))));
+  } finally {
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, 'inbox', 'promoted', path.basename(proposal)), { force: true });
+    fs.rmSync(proposal, { force: true });
+    fs.writeFileSync(registryPath, originalRegistry);
+  }
+});
+
+test('install-adapter dry-run describes adapter writes', () => {
+  const root = tempDir();
+  const project = path.join(root, 'adapter-app');
+  fs.mkdirSync(project);
+  writeJson(path.join(project, 'package.json'), { name: 'adapter-app', dependencies: {} });
+
+  const output = JSON.parse(run(['install-adapter', 'cursor', project, '--dry-run']));
+  assert.equal(output.adapter, 'cursor');
+  assert.ok(output.actions.some(action => action.to.endsWith('.cursor/rules/ai-memory-vault.mdc')));
+});
+
+test('claim writes sync manifest with vault revision', () => {
+  const root = tempDir();
+  const project = path.join(root, 'manifest-app');
+  fs.mkdirSync(project);
+  writeJson(path.join(project, 'package.json'), { name: 'manifest-app', dependencies: {} });
+  run(['claim', project]);
+  const manifest = JSON.parse(fs.readFileSync(path.join(project, '.ai-memory', 'sync-manifest.json'), 'utf8'));
+  assert.ok(manifest.syncedAt);
+  assert.ok(Array.isArray(manifest.assets));
 });
 
 test('validate fails for broken registry path and obvious secret', () => {

@@ -19,7 +19,11 @@
     "list-assets": "node scripts/ai-vault.js list-assets",
     "asset": "node scripts/ai-vault.js asset",
     "impact": "node scripts/ai-vault.js impact",
-    "map": "node scripts/ai-vault.js map"
+    "map": "node scripts/ai-vault.js map",
+    "promote": "node scripts/ai-vault.js promote",
+    "index": "node scripts/ai-vault.js index",
+    "search": "node scripts/ai-vault.js search",
+    "install-adapter": "node scripts/ai-vault.js install-adapter"
   },
   "keywords": [
     "claude-code",

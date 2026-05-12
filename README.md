@@ -24,8 +24,13 @@ ai-vault context /path/to/project
 ai-vault status /path/to/project
 ai-vault sync /path/to/project --dry-run
 ai-vault list-assets
+ai-vault asset vault-maintainer
+ai-vault index
+ai-vault search "debugging docker"
 ai-vault impact vault-maintainer
 ai-vault map
+ai-vault promote inbox/proposals/<proposal>.md --dry-run
+ai-vault install-adapter claude-code /path/to/project --dry-run
 ai-vault validate
 ```
 
@@ -49,7 +54,7 @@ or:
 - `VAULT_PROTOCOL.md` — mandatory instructions for any AI agent using this vault.
 - `registry.yaml` — index of global assets, projects, skills, and patterns.
 - `skills/vault-maintainer/SKILL.md` — global AI skill that tells agents how to maintain and claim the vault.
-- `scripts/ai-vault.js` — lightweight helper CLI for scanning, claiming, exporting, and validating.
+- `scripts/ai-vault.js` — lightweight helper CLI for scanning, claiming, exporting, promoting, indexing, syncing, and validating.
 - `docs/BORROWED_IDEAS.md` — roadmap of useful patterns borrowed from adjacent open-source memory/skill projects.
 - `docs/GITNEXUS_IDEAS.md` — GitNexus-inspired roadmap for asset graph, impact, status, map, and safe promotion workflows.
 
@@ -59,10 +64,13 @@ or:
 - `claim` reads `registry.yaml`, matches assets by `match.always`, files, dependencies, frameworks, languages, packages, aliases, and remotes, then writes `.ai-memory/claimed-assets.json` with asset hashes, installs matched skills under `.claude/skills/`, and writes a compact marked `.claude/MEMORY.md` claim block.
 - `export` creates `projects/<project-id>/` from templates and adds a matching private `project:<project-id>` entry to `registry.yaml`.
 - `summarize` stages a non-destructive proposal in `inbox/proposals/` and a session summary in `inbox/session-summaries/`.
+- `promote` moves a reviewed proposal into durable `projects/<id>/memory.md` and archives it under `inbox/promoted/`.
 - `context` prints compact startup context for any agent without loading full assets.
 - `status` compares a project's claim manifest with current vault asset hashes and reports fresh/stale/missing/visibility changes.
 - `sync` runs the Git-backed recovery loop: pull vault, validate, claim into project, then print status (`--dry-run` previews only).
 - `list-assets` and `asset <id>` provide progressive disclosure primitives.
+- `index` builds `.ai-memory-index.json`; `search` queries the lightweight local index without a database.
+- `install-adapter <claude-code|codex|openclaw|cursor>` writes small adapter files so each agent knows how to use the vault.
 - `impact <asset-id>` and `map` expose lightweight asset graph relationships inspired by GitNexus.
 - `validate` checks required vault files, registry paths, scopes/visibility, required CLI scripts/bin wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 

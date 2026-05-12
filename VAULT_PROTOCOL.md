@@ -179,14 +179,19 @@ This means:
 1. Pull the vault from Git.
 2. Validate vault structure and safety.
 3. Claim relevant assets into the target project.
-4. Report `status` so stale/missing assets are visible.
+4. Write/update `.ai-memory/sync-manifest.json` so the local projection records the vault revision.
+5. Report `status` so stale/missing assets are visible.
 
 Use progressive disclosure:
 
 - `ai-vault list-assets` to inspect available assets.
 - `ai-vault asset <id>` to read one asset.
+- `ai-vault index` after substantial vault edits.
+- `ai-vault search <query>` to retrieve relevant vault docs without loading the full repo.
 - `ai-vault impact <id>` before changing or deleting important assets.
 - `ai-vault map` to see the asset graph.
+
+Install agent adapters with `ai-vault install-adapter <adapter> <project>` when a project needs local hints for Claude Code, Codex, OpenClaw, or Cursor.
 
 Do not point raw Claude/Codex cache directories directly at the vault. Export durable knowledge through proposals and promotion instead.
 
@@ -198,3 +203,4 @@ Use `inbox/proposals/` and `inbox/session-summaries/` for staging.
 - Do not promote raw transcripts.
 - Mark private project memory as `visibility: private` by default.
 - Promote only verified, durable knowledge into canonical `projects/`, `patterns/`, or `skills/` files.
+- Use `ai-vault promote <proposal>` only after the proposal has been reviewed for accuracy and secrets.

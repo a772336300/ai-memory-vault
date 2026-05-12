@@ -12,6 +12,7 @@ const target = path.resolve(targetArg || cwd);
 const dryRun = args.includes('--dry-run');
 const projectIdArg = valueAfter('--project-id');
 const textArg = valueAfter('--text');
+const adapterArg = valueAfter('--adapter');
 const outputJson = args.includes('--json');
 
 const vaultRoot = findVaultRoot(cwd);
@@ -22,7 +23,7 @@ function valueAfter(flag) {
 }
 
 function firstPositionalAfterCommand() {
-  const flagsWithValues = new Set(['--project-id', '--text']);
+  const flagsWithValues = new Set(['--project-id', '--text', '--adapter']);
   for (let i = 1; i < args.length; i += 1) {
     const arg = args[i];
     if (arg.startsWith('--')) {
@@ -155,8 +156,17 @@ function anyOverlap(a = [], b = []) {
 }
 
 function projectHasFile(project, pattern) {
+  const candidate = path.join(project.path, pattern);
+  if (pattern === '.claude') return hasUserClaudeMemory(candidate);
   if (pattern.endsWith('/**')) return exists(path.join(project.path, pattern.slice(0, -3)));
-  return exists(path.join(project.path, pattern));
+  return exists(candidate);
+}
+
+function hasUserClaudeMemory(dir) {
+  if (!exists(dir)) return false;
+  const memory = path.join(dir, 'MEMORY.md');
+  if (exists(memory) && !safeRead(memory).includes('AI_MEMORY_VAULT_CLAIM')) return true;
+  return fs.readdirSync(dir).some(name => !['MEMORY.md', 'skills'].includes(name));
 }
 
 function assetReason(asset, project) {
@@ -220,6 +230,7 @@ function claim(project) {
   mkdirp(claimDir);
   mkdirp(skillsDir);
   writeFile(path.join(claimDir, 'claimed-assets.json'), `${JSON.stringify(record, null, 2)}\n`);
+  writeFile(path.join(claimDir, 'sync-manifest.json'), `${JSON.stringify({ syncedAt: record.claimedAt, vaultRevision: git('rev-parse HEAD', vaultRoot) || null, assets }, null, 2)}\n`);
 
   const memoryParts = [
     '# Claimed AI Memory\n',
@@ -438,6 +449,8 @@ function currentAssetRecordById(id) {
 
 function statusReport(project) {
   const manifest = readClaimManifest(project);
+  const syncManifestPath = path.join(project.path, '.ai-memory', 'sync-manifest.json');
+  const syncManifest = exists(syncManifestPath) ? readJson(syncManifestPath) : null;
   const rows = [];
   if (manifest) {
     for (const claimed of manifest.assets || []) {
@@ -453,7 +466,7 @@ function statusReport(project) {
     }
   }
   const recommended = matchAssets(project).map(assetRecord).filter(asset => !(manifest?.assets || []).some(claimed => claimed.id === asset.id));
-  return { project: project.name, path: project.path, manifestFound: Boolean(manifest), claimedAt: manifest?.claimedAt || null, assets: rows, recommendedNew: recommended };
+  return { project: project.name, path: project.path, manifestFound: Boolean(manifest), claimedAt: manifest?.claimedAt || null, syncManifestFound: Boolean(syncManifest), vaultRevision: syncManifest?.vaultRevision || null, syncedAt: syncManifest?.syncedAt || null, assets: rows, recommendedNew: recommended };
 }
 
 function printStatus(project) {
@@ -465,6 +478,8 @@ function printStatus(project) {
   console.log(`# AI Memory Vault Status: ${report.project}`);
   console.log(`Manifest: ${report.manifestFound ? 'found' : 'missing'}`);
   if (report.claimedAt) console.log(`Claimed at: ${report.claimedAt}`);
+  if (report.syncedAt) console.log(`Synced at: ${report.syncedAt}`);
+  if (report.vaultRevision) console.log(`Vault revision: ${report.vaultRevision}`);
   console.log('\n## Claimed assets');
   if (!report.assets.length) console.log('- none');
   for (const row of report.assets) console.log(`- ${row.id}: ${row.status} (claimed=${row.claimed || '-'}, current=${row.current || '-'}) — ${row.path || '-'}`);
@@ -556,6 +571,149 @@ function syncProject(project) {
   printStatus(project);
 }
 
+
+function vaultTextFiles() {
+  const out = [];
+  walk(vaultRoot, file => {
+    if (file.includes('/.git/')) return;
+    const rel = path.relative(vaultRoot, file).split(path.sep).join('/');
+    if (rel === 'package-lock.json' || rel.startsWith('.ai-memory-index')) return;
+    if (/\.(md|yaml|yml|json)$/.test(rel)) out.push({ path: rel, text: safeRead(file) });
+  });
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function buildIndex() {
+  const assetsByPath = new Map(allAssetRecords().map(asset => [asset.path, asset]));
+  const entries = vaultTextFiles().map(file => ({
+    path: file.path,
+    assetId: assetsByPath.get(file.path)?.id || null,
+    type: assetsByPath.get(file.path)?.type || inferEntryType(file.path),
+    title: firstHeading(file.text) || file.path,
+    tokens: tokenize(`${file.path}\n${file.text}`).slice(0, 2000),
+    sha256: sha256(file.text),
+    summary: file.text.split(/\r?\n/).filter(Boolean).slice(0, 3).join(' ').slice(0, 240)
+  }));
+  const index = { builtAt: new Date().toISOString(), vaultRevision: git('rev-parse HEAD', vaultRoot) || null, entries };
+  if (dryRun || outputJson) console.log(JSON.stringify(index, null, 2));
+  else {
+    writeFile(path.join(vaultRoot, '.ai-memory-index.json'), `${JSON.stringify(index, null, 2)}\n`);
+    console.log(`Indexed ${entries.length} vault documents into .ai-memory-index.json`);
+  }
+}
+
+function inferEntryType(rel) {
+  if (rel.startsWith('projects/')) return 'project';
+  if (rel.startsWith('skills/')) return 'skill';
+  if (rel.startsWith('patterns/')) return 'pattern';
+  if (rel.startsWith('global/')) return 'global';
+  if (rel.startsWith('inbox/')) return 'inbox';
+  return 'doc';
+}
+
+function firstHeading(text) {
+  return text.split(/\r?\n/).find(line => line.startsWith('# '))?.replace(/^#\s+/, '') || null;
+}
+
+function tokenize(text) {
+  return text.toLowerCase().match(/[a-z0-9_\-.\u4e00-\u9fff]+/g) || [];
+}
+
+function searchVault(query) {
+  const q = tokenize(query || textArg || '').filter(Boolean);
+  if (!q.length) {
+    console.error('Search query required. Use: ai-vault search "query"');
+    process.exit(1);
+  }
+  const indexPath = path.join(vaultRoot, '.ai-memory-index.json');
+  const index = exists(indexPath) ? readJson(indexPath) : { entries: vaultTextFiles().map(file => ({ path: file.path, title: firstHeading(file.text) || file.path, type: inferEntryType(file.path), tokens: tokenize(`${file.path}\n${file.text}`), summary: file.text.slice(0, 240) })) };
+  const results = index.entries.map(entry => {
+    const bag = entry.tokens || [];
+    const score = q.reduce((sum, token) => sum + bag.filter(x => x.includes(token) || token.includes(x)).length, 0);
+    return { path: entry.path, assetId: entry.assetId || null, type: entry.type, title: entry.title, score, summary: entry.summary };
+  }).filter(r => r.score > 0).sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).slice(0, 10);
+  if (outputJson) console.log(JSON.stringify(results, null, 2));
+  else {
+    console.log(`# Search: ${q.join(' ')}`);
+    if (!results.length) console.log('- no matches');
+    for (const r of results) console.log(`- ${r.path} (${r.type}, score=${r.score}) — ${r.title}`);
+  }
+}
+
+function promoteProposal(proposalArg) {
+  if (!proposalArg) {
+    console.error('Proposal path required. Use: ai-vault promote inbox/proposals/<file>.md');
+    process.exit(1);
+  }
+  const proposalPath = path.isAbsolute(proposalArg) ? proposalArg : path.join(vaultRoot, proposalArg);
+  if (!exists(proposalPath)) {
+    console.error(`Proposal not found: ${proposalArg}`);
+    process.exit(1);
+  }
+  const text = safeRead(proposalPath);
+  const projectId = (text.match(/- Project ID:\s*(.+)/) || [])[1]?.trim() || path.basename(proposalPath, '.md').replace(/^\d{4}-.+?-/, '');
+  const durable = (text.match(/## Proposed durable memory\n\n([\s\S]*?)\n\n## Promotion target/) || [])[1]?.trim() || '_No durable memory extracted._';
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  const memoryPath = path.join(projectDir, 'memory.md');
+  const stamp = new Date().toISOString();
+  const section = `\n\n## Promoted ${stamp}\n\nSource proposal: ${path.relative(vaultRoot, proposalPath)}\n\n${durable}\n`;
+  if (dryRun) {
+    console.log(`# Promote dry-run: ${projectId}`);
+    console.log(`Would append to: ${path.relative(vaultRoot, memoryPath)}`);
+    console.log(section.trim());
+    return;
+  }
+  mkdirp(projectDir);
+  if (!exists(memoryPath)) writeFile(memoryPath, `# ${projectId} Memory\n`);
+  fs.appendFileSync(memoryPath, section);
+  const promotedDir = path.join(vaultRoot, 'inbox', 'promoted');
+  const promotedPath = path.join(promotedDir, path.basename(proposalPath));
+  mkdirp(promotedDir);
+  fs.renameSync(proposalPath, promotedPath);
+  ensureProjectRegistryEntry({ name: projectId, languages: [], frameworks: [], remote: '', packageName: null });
+  console.log(`Promoted proposal to ${path.relative(vaultRoot, memoryPath)}`);
+  console.log(`Moved proposal to ${path.relative(vaultRoot, promotedPath)}`);
+}
+
+function installAdapter(adapter, project) {
+  const chosen = adapter || adapterArg || targetArg;
+  if (!chosen || chosen === project.path) {
+    console.error('Adapter required. Use: ai-vault install-adapter <claude-code|codex|openclaw|cursor> [project]');
+    process.exit(1);
+  }
+  const actions = adapterActions(chosen, project);
+  if (dryRun) {
+    console.log(JSON.stringify({ adapter: chosen, project: project.path, actions }, null, 2));
+    return;
+  }
+  for (const action of actions) {
+    if (action.kind === 'copy') writeFile(action.to, safeRead(action.from));
+    if (action.kind === 'write') writeFile(action.to, action.content);
+  }
+  console.log(`Installed ${actions.length} ${chosen} adapter actions for ${project.path}`);
+}
+
+function adapterActions(adapter, project) {
+  const vaultSkill = path.join(vaultRoot, 'skills', 'vault-maintainer', 'SKILL.md');
+  const rel = path.relative(project.path, vaultRoot) || '.';
+  const instruction = `# AI Memory Vault\n\nVault path: ${vaultRoot}\n\nBefore substantial work, run or ask the agent to use:\n\n\`ai-vault context .\`\n\nAfter meaningful work, stage a summary with:\n\n\`ai-vault summarize . --text "<summary>"\`\n`;
+  if (adapter === 'claude-code') return [
+    { kind: 'copy', from: vaultSkill, to: path.join(project.path, '.claude', 'skills', 'vault-maintainer', 'SKILL.md') },
+    { kind: 'write', to: path.join(project.path, '.claude', 'AI_MEMORY_VAULT.md'), content: instruction }
+  ];
+  if (adapter === 'codex') return [
+    { kind: 'write', to: path.join(project.path, '.codex', 'AI_MEMORY_VAULT.md'), content: instruction }
+  ];
+  if (adapter === 'openclaw') return [
+    { kind: 'write', to: path.join(project.path, 'AGENTS.ai-memory-vault.md'), content: instruction }
+  ];
+  if (adapter === 'cursor') return [
+    { kind: 'write', to: path.join(project.path, '.cursor', 'rules', 'ai-memory-vault.mdc'), content: `---\ndescription: Use AI Memory Vault\nalwaysApply: false\n---\n\n${instruction}\nVault relative path: ${rel}\n` }
+  ];
+  console.error(`Unknown adapter: ${adapter}`);
+  process.exit(1);
+}
+
 function validate() {
   const required = ['README.md', 'VAULT_PROTOCOL.md', 'registry.yaml', 'skills/vault-maintainer/SKILL.md'];
   const missing = required.filter(p => !exists(path.join(vaultRoot, p)));
@@ -563,7 +721,7 @@ function validate() {
   const suspicious = [];
   const pkgPath = path.join(vaultRoot, 'package.json');
   const pkg = exists(pkgPath) ? readJson(pkgPath) : {};
-  const requiredScripts = ['scan', 'claim', 'export', 'summarize', 'context', 'status', 'sync', 'list-assets', 'asset', 'impact', 'map', 'validate'];
+  const requiredScripts = ['scan', 'claim', 'export', 'summarize', 'promote', 'context', 'status', 'sync', 'list-assets', 'asset', 'index', 'search', 'impact', 'map', 'install-adapter', 'validate'];
   for (const script of requiredScripts) {
     if (!pkg.scripts?.[script]?.includes(`ai-vault.js ${script}`)) failures.push(`package.json missing usable "${script}" script`);
   }
@@ -598,7 +756,7 @@ function validate() {
   walk(vaultRoot, file => {
     if (file.includes('/.git/')) return;
     const rel = path.relative(vaultRoot, file);
-    if (rel === 'package-lock.json') return;
+    if (rel === 'package-lock.json' || rel === '.ai-memory-index.json') return;
     const text = safeRead(file);
     for (const p of patterns) if (p.test(text)) suspicious.push(rel);
   });
@@ -621,19 +779,23 @@ function walk(dir, cb) {
 }
 
 function help() {
-  console.log(`AI Memory Vault CLI\n\nUsage:\n  ai-vault scan [project]\n  ai-vault claim [project] [--dry-run]\n  ai-vault export [project] [--project-id id] [--dry-run]\n  ai-vault summarize [project] [--project-id id] [--text text] [--dry-run]\n  ai-vault context [project] [--project-id id]\n  ai-vault status [project] [--json]\n  ai-vault sync [project] [--dry-run]\n  ai-vault list-assets [--json]\n  ai-vault asset <id> [--json]\n  ai-vault impact <id> [--json]\n  ai-vault map\n  ai-vault validate\n`);
+  console.log(`AI Memory Vault CLI\n\nUsage:\n  ai-vault scan [project]\n  ai-vault claim [project] [--dry-run]\n  ai-vault export [project] [--project-id id] [--dry-run]\n  ai-vault summarize [project] [--project-id id] [--text text] [--dry-run]\n  ai-vault context [project] [--project-id id]\n  ai-vault status [project] [--json]\n  ai-vault sync [project] [--dry-run]\n  ai-vault list-assets [--json]\n  ai-vault asset <id> [--json]\n  ai-vault impact <id> [--json]\n  ai-vault index [--json|--dry-run]\n  ai-vault search <query> [--json]\n  ai-vault map\n  ai-vault promote <proposal> [--dry-run]\n  ai-vault install-adapter <claude-code|codex|openclaw|cursor> [project] [--dry-run]\n  ai-vault validate\n`);
 }
 
 if (command === 'scan') printScan(detectProject(target));
 else if (command === 'claim') claim(detectProject(target));
 else if (command === 'export') exportDraft(detectProject(target));
 else if (command === 'summarize') summarizeProposal(detectProject(target));
+else if (command === 'promote') promoteProposal(targetArg);
 else if (command === 'context') renderContext(detectProject(target));
 else if (command === 'status') printStatus(detectProject(target));
 else if (command === 'sync') syncProject(detectProject(target));
 else if (command === 'list-assets') listAssets();
 else if (command === 'asset') printAsset(targetArg);
+else if (command === 'index') buildIndex();
+else if (command === 'search') searchVault(targetArg);
 else if (command === 'impact') printImpact(targetArg);
 else if (command === 'map') renderMap();
+else if (command === 'install-adapter') installAdapter(targetArg, detectProject(args[1] && ['claude-code','codex','openclaw','cursor'].includes(args[1]) && args[2] && !args[2].startsWith('--') ? path.resolve(args[2]) : cwd));
 else if (command === 'validate') validate();
 else help();
