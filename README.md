@@ -18,6 +18,8 @@ cd ~/.ai-memory-vault
 npm link
 ai-vault scan /path/to/project
 ai-vault claim /path/to/project --dry-run
+ai-vault export /path/to/project --project-id my-project
+ai-vault validate
 ```
 
 For Claude Code, install the global maintainer skill:
@@ -42,6 +44,13 @@ or:
 - `skills/vault-maintainer/SKILL.md` — global AI skill that tells agents how to maintain and claim the vault.
 - `scripts/ai-vault.js` — lightweight helper CLI for scanning, claiming, exporting, and validating.
 
+## CLI behavior
+
+- `scan` prints detected project identity, remote, package name, languages, frameworks, and dependencies as JSON.
+- `claim` writes `.ai-memory/claimed-assets.json`, installs matched skills under `.claude/skills/`, and merges claimed non-skill assets into a marked `.claude/MEMORY.md` block.
+- `export` creates `projects/<project-id>/` from templates and adds a matching `project:<project-id>` entry to `registry.yaml`.
+- `validate` checks required vault files, registry paths, required CLI scripts/bin wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
+
 ## Safety model
 
 The vault stores durable, reusable development knowledge only:
@@ -55,3 +64,5 @@ Run validation before committing:
 ```bash
 npm run validate
 ```
+
+The repository includes `.github/workflows/validate.yml` so GitHub runs the same validation on pushes and pull requests.

@@ -6,7 +6,7 @@ import { execSync } from 'node:child_process';
 const cwd = process.cwd();
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
-const targetArg = args.find((a, i) => i > 0 && !a.startsWith('--'));
+const targetArg = firstPositionalAfterCommand();
 const target = path.resolve(targetArg || cwd);
 const dryRun = args.includes('--dry-run');
 const projectIdArg = valueAfter('--project-id');
@@ -16,6 +16,19 @@ const vaultRoot = findVaultRoot(cwd);
 function valueAfter(flag) {
   const idx = args.indexOf(flag);
   return idx >= 0 ? args[idx + 1] : undefined;
+}
+
+function firstPositionalAfterCommand() {
+  const flagsWithValues = new Set(['--project-id']);
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg.startsWith('--')) {
+      if (flagsWithValues.has(arg) && args[i + 1] && !args[i + 1].startsWith('--')) i += 1;
+      continue;
+    }
+    return arg;
+  }
+  return undefined;
 }
 
 function findVaultRoot(start) {
@@ -71,6 +84,14 @@ function loadRegistryText() {
   return safeRead(path.join(vaultRoot, 'registry.yaml'));
 }
 
+function registryPaths() {
+  return loadRegistryText()
+    .split(/\r?\n/)
+    .map(line => line.match(/^\s*path:\s*['"]?([^'"\s#]+)['"]?/))
+    .filter(Boolean)
+    .map(match => match[1]);
+}
+
 function matchAssets(project) {
   const registry = loadRegistryText();
   const matches = [];
@@ -121,6 +142,10 @@ function claim(project) {
     if (m.path.endsWith('SKILL.md') && exists(source)) {
       const skillId = m.id.replace(/^skill:/, '');
       writeFile(path.join(skillsDir, skillId, 'SKILL.md'), safeRead(source));
+    } else if (exists(source) && fs.statSync(source).isFile()) {
+      memoryParts.push(`\n## ${m.id}\n\n`);
+      memoryParts.push(`Source: ${m.path}\n\n`);
+      memoryParts.push(safeRead(source).trim(), '\n');
     }
   }
 
@@ -143,13 +168,60 @@ function exportDraft(project) {
     const template = safeRead(path.join(vaultRoot, 'templates', 'project', name));
     if (!exists(path.join(projectDir, name))) writeFile(path.join(projectDir, name), template || `# ${name}\n`);
   }
+  ensureProjectRegistryEntry(project);
   console.log(`Created/updated draft project memory at ${path.relative(vaultRoot, projectDir)}`);
+}
+
+function ensureProjectRegistryEntry(project) {
+  const registryPath = path.join(vaultRoot, 'registry.yaml');
+  const registry = loadRegistryText();
+  if (new RegExp(`id:\\s*project:${escapeRegExp(project.name)}\\b`).test(registry)) return;
+
+  const tags = [...new Set([...project.languages, ...project.frameworks, 'project'])];
+  const entry = [
+    `  - id: project:${project.name}`,
+    '    type: project',
+    `    title: ${project.name}`,
+    `    path: projects/${project.name}`,
+    '    scope: project',
+    `    tags: [${tags.join(', ')}]`,
+    '    match:',
+    `      aliases: [${project.name}]`,
+    project.remote ? `      remotes: [${project.remote}]` : null,
+    project.packageName ? `      packages: [${project.packageName}]` : null
+  ].filter(Boolean).join('\n');
+
+  const next = registry.replace(/projects:\s*\[\]\s*$/m, `projects:\n${entry}\n`);
+  writeFile(registryPath, next === registry ? `${registry.trimEnd()}\n${entry}\n` : next);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function validate() {
   const required = ['README.md', 'VAULT_PROTOCOL.md', 'registry.yaml', 'skills/vault-maintainer/SKILL.md'];
   const missing = required.filter(p => !exists(path.join(vaultRoot, p)));
+  const failures = [];
   const suspicious = [];
+  const pkgPath = path.join(vaultRoot, 'package.json');
+  const pkg = exists(pkgPath) ? readJson(pkgPath) : {};
+  const requiredScripts = ['scan', 'claim', 'export', 'validate'];
+  for (const script of requiredScripts) {
+    if (!pkg.scripts?.[script]?.includes(`ai-vault.js ${script}`)) failures.push(`package.json missing usable "${script}" script`);
+  }
+  if (pkg.bin?.['ai-vault'] !== './scripts/ai-vault.js') failures.push('package.json bin.ai-vault must point to ./scripts/ai-vault.js');
+
+  for (const registryPath of registryPaths()) {
+    if (!exists(path.join(vaultRoot, registryPath))) failures.push(`registry path does not exist: ${registryPath}`);
+  }
+  for (const skill of ['skills/vault-maintainer', 'skills/claude-code-memory']) {
+    if (!exists(path.join(vaultRoot, skill, 'SKILL.md'))) failures.push(`missing ${skill}/SKILL.md`);
+    if (!exists(path.join(vaultRoot, skill, 'meta.yaml'))) failures.push(`missing ${skill}/meta.yaml`);
+  }
+  const workflow = safeRead(path.join(vaultRoot, '.github/workflows/validate.yml'));
+  if (!workflow.includes('npm run validate')) failures.push('.github/workflows/validate.yml must run npm run validate');
+
   const patterns = [
     /BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY/,
     /\bghp_[A-Za-z0-9_]{20,}\b/,
@@ -165,8 +237,9 @@ function validate() {
     for (const p of patterns) if (p.test(text)) suspicious.push(rel);
   });
 
-  if (missing.length || suspicious.length) {
+  if (missing.length || failures.length || suspicious.length) {
     if (missing.length) console.error(`Missing required files: ${missing.join(', ')}`);
+    if (failures.length) console.error(`Validation failures:\n- ${failures.join('\n- ')}`);
     if (suspicious.length) console.error(`Potential secrets found in: ${[...new Set(suspicious)].join(', ')}`);
     process.exit(1);
   }

@@ -24,9 +24,13 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
 
 5. **Helper CLI** — `scripts/ai-vault.js`
    - `scan`: detect project identity and stack.
-   - `claim`: install matched assets into a project.
-   - `export`: create a draft project memory directory.
-   - `validate`: check required files and obvious secret patterns.
+   - `claim`: install matched skills and merge matched memory assets into a project.
+   - `export`: create a draft project memory directory and registry entry.
+   - `validate`: check required files, registry paths, CLI wiring, skill metadata, GitHub workflow wiring, and obvious secret patterns.
+
+6. **GitHub workflow** — `.github/workflows/validate.yml`
+   - Runs `npm run validate` on push and pull request.
+   - Keeps the vault cloneable and usable from GitHub without extra services.
 
 ## Why GitHub
 

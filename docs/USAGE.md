@@ -12,7 +12,7 @@ Optional helper:
 ai-vault export /path/to/project --project-id my-project
 ```
 
-The helper creates a draft. An AI should refine it.
+The helper creates `projects/<project-id>/` from templates and registers the project in `registry.yaml`. An AI should refine the generated draft before relying on it.
 
 ## Claim vault assets into current project
 
@@ -25,6 +25,22 @@ Optional helper:
 ```bash
 ai-vault claim /path/to/project
 ```
+
+`claim` installs matched skills under `.claude/skills/`, records the claim in `.ai-memory/claimed-assets.json`, and merges claimed non-skill assets into a marked block in `.claude/MEMORY.md`.
+
+Preview without writing:
+
+```bash
+ai-vault claim /path/to/project --dry-run
+```
+
+## Validate the vault
+
+```bash
+npm run validate
+```
+
+Validation checks required files, registry paths, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
 ## Restore on a new computer
 
