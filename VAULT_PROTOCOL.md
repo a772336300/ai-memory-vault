@@ -164,7 +164,33 @@ Users can simply say:
 
 The AI should execute the workflow directly instead of asking the user to run commands, unless credentials or irreversible external actions are required.
 
-## 8. Inbox and proposal rules
+## 8. Git-backed Memory OS rules
+
+Treat this vault as the source of truth. Treat local agent files as projections.
+
+Recommended recovery loop on any computer:
+
+```bash
+ai-vault sync <project>
+```
+
+This means:
+
+1. Pull the vault from Git.
+2. Validate vault structure and safety.
+3. Claim relevant assets into the target project.
+4. Report `status` so stale/missing assets are visible.
+
+Use progressive disclosure:
+
+- `ai-vault list-assets` to inspect available assets.
+- `ai-vault asset <id>` to read one asset.
+- `ai-vault impact <id>` before changing or deleting important assets.
+- `ai-vault map` to see the asset graph.
+
+Do not point raw Claude/Codex cache directories directly at the vault. Export durable knowledge through proposals and promotion instead.
+
+## 9. Inbox and proposal rules
 
 Use `inbox/proposals/` and `inbox/session-summaries/` for staging.
 

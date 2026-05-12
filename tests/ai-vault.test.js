@@ -141,6 +141,62 @@ test('summarize creates non-destructive proposal and session summary inbox entri
   }
 });
 
+
+
+test('list-assets and asset expose progressive disclosure primitives', () => {
+  const assets = JSON.parse(run(['list-assets', '--json']));
+  assert.ok(assets.some(asset => asset.id === 'global-instructions'));
+  assert.ok(assets.every(asset => asset.sha256 && asset.visibility));
+
+  const asset = JSON.parse(run(['asset', 'global-instructions', '--json']));
+  assert.equal(asset.id, 'global-instructions');
+  assert.match(asset.content, /Global AI Instructions/);
+});
+
+test('status detects fresh and stale claimed assets', () => {
+  const root = tempDir();
+  const project = path.join(root, 'status-app');
+  fs.mkdirSync(project);
+  writeJson(path.join(project, 'package.json'), { name: 'status-app', dependencies: {} });
+  run(['claim', project]);
+
+  let status = JSON.parse(run(['status', project, '--json']));
+  assert.equal(status.manifestFound, true);
+  assert.ok(status.assets.some(asset => asset.status === 'fresh'));
+
+  const manifestPath = path.join(project, '.ai-memory', 'claimed-assets.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.assets[0].sha256 = 'outdated';
+  manifest.assets[0].shortHash = 'outdated';
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  status = JSON.parse(run(['status', project, '--json']));
+  assert.ok(status.assets.some(asset => asset.status === 'stale'));
+});
+
+test('impact and map expose asset graph relationships', () => {
+  const impact = JSON.parse(run(['impact', 'vault-maintainer', '--json']));
+  assert.equal(impact.asset.id, 'vault-maintainer');
+  assert.ok(Array.isArray(impact.fileReferences));
+
+  const map = run(['map']);
+  assert.match(map, /```mermaid/);
+  assert.match(map, /global_assets/);
+  assert.match(map, /vault_maintainer/);
+});
+
+test('sync dry-run describes pull validate claim status workflow', () => {
+  const root = tempDir();
+  const project = path.join(root, 'sync-app');
+  fs.mkdirSync(project);
+  writeJson(path.join(project, 'package.json'), { name: 'sync-app', dependencies: {} });
+
+  const output = run(['sync', project, '--dry-run']);
+  assert.match(output, /git pull --ff-only/);
+  assert.match(output, /ai-vault claim/);
+  assert.match(output, /ai-vault status/);
+});
+
 test('validate fails for broken registry path and obvious secret', () => {
   const root = tempDir();
   const vault = path.join(root, 'vault');

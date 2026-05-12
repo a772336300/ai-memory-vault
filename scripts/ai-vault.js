@@ -12,6 +12,7 @@ const target = path.resolve(targetArg || cwd);
 const dryRun = args.includes('--dry-run');
 const projectIdArg = valueAfter('--project-id');
 const textArg = valueAfter('--text');
+const outputJson = args.includes('--json');
 
 const vaultRoot = findVaultRoot(cwd);
 
@@ -374,6 +375,187 @@ function summarizeProposal(project) {
   console.log(`Created session summary at ${path.relative(vaultRoot, sessionPath)}`);
 }
 
+
+function allAssetRecords() {
+  return parseRegistry()
+    .filter(asset => asset.path && exists(path.join(vaultRoot, asset.path)))
+    .map(asset => assetRecord({ ...asset, reason: asset.reason || 'registry asset' }));
+}
+
+function findAssetById(id) {
+  return parseRegistry().find(asset => asset.id === id);
+}
+
+function listAssets() {
+  const assets = allAssetRecords();
+  if (outputJson) {
+    console.log(JSON.stringify(assets, null, 2));
+    return;
+  }
+  console.log('# AI Memory Vault Assets\n');
+  for (const asset of assets) {
+    console.log(`- ${asset.id} (${asset.type}, ${asset.scope || 'scope?'}, ${asset.visibility}, ${asset.shortHash}) — ${asset.path}`);
+  }
+}
+
+function printAsset(id) {
+  const asset = findAssetById(id);
+  if (!asset) {
+    console.error(`Asset not found: ${id}`);
+    process.exit(1);
+  }
+  const source = path.join(vaultRoot, asset.path || '');
+  if (!asset.path || !exists(source)) {
+    console.error(`Asset path missing for ${id}: ${asset.path || '(none)'}`);
+    process.exit(1);
+  }
+  const record = assetRecord({ ...asset, reason: 'direct read' });
+  if (outputJson) {
+    console.log(JSON.stringify({ ...record, content: safeRead(source) }, null, 2));
+    return;
+  }
+  console.log(`# Asset: ${record.id}`);
+  console.log(`Type: ${record.type}`);
+  console.log(`Scope: ${record.scope || 'scope?'}`);
+  console.log(`Visibility: ${record.visibility}`);
+  console.log(`Path: ${record.path}`);
+  console.log(`SHA256: ${record.sha256}`);
+  console.log('\n---\n');
+  console.log(safeRead(source));
+}
+
+function readClaimManifest(project) {
+  const manifestPath = path.join(project.path, '.ai-memory', 'claimed-assets.json');
+  if (!exists(manifestPath)) return null;
+  return readJson(manifestPath);
+}
+
+function currentAssetRecordById(id) {
+  const asset = findAssetById(id);
+  if (!asset || !asset.path || !exists(path.join(vaultRoot, asset.path))) return null;
+  return assetRecord({ ...asset, reason: 'status check' });
+}
+
+function statusReport(project) {
+  const manifest = readClaimManifest(project);
+  const rows = [];
+  if (manifest) {
+    for (const claimed of manifest.assets || []) {
+      const current = currentAssetRecordById(claimed.id);
+      if (!current) {
+        rows.push({ id: claimed.id, status: 'missing', claimed: claimed.shortHash || null, current: null, path: claimed.path });
+        continue;
+      }
+      const changedHash = claimed.sha256 !== current.sha256;
+      const changedVisibility = claimed.visibility && claimed.visibility !== current.visibility;
+      const status = changedVisibility ? 'visibility-changed' : changedHash ? 'stale' : 'fresh';
+      rows.push({ id: claimed.id, status, claimed: claimed.shortHash || null, current: current.shortHash, path: current.path, visibility: current.visibility });
+    }
+  }
+  const recommended = matchAssets(project).map(assetRecord).filter(asset => !(manifest?.assets || []).some(claimed => claimed.id === asset.id));
+  return { project: project.name, path: project.path, manifestFound: Boolean(manifest), claimedAt: manifest?.claimedAt || null, assets: rows, recommendedNew: recommended };
+}
+
+function printStatus(project) {
+  const report = statusReport(project);
+  if (outputJson) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  console.log(`# AI Memory Vault Status: ${report.project}`);
+  console.log(`Manifest: ${report.manifestFound ? 'found' : 'missing'}`);
+  if (report.claimedAt) console.log(`Claimed at: ${report.claimedAt}`);
+  console.log('\n## Claimed assets');
+  if (!report.assets.length) console.log('- none');
+  for (const row of report.assets) console.log(`- ${row.id}: ${row.status} (claimed=${row.claimed || '-'}, current=${row.current || '-'}) — ${row.path || '-'}`);
+  console.log('\n## Recommended new assets');
+  if (!report.recommendedNew.length) console.log('- none');
+  for (const asset of report.recommendedNew) console.log(`- ${asset.id} (${asset.shortHash}) — ${asset.path}`);
+}
+
+function impactReport(id) {
+  const asset = findAssetById(id);
+  if (!asset) {
+    console.error(`Asset not found: ${id}`);
+    process.exit(1);
+  }
+  const needle = [id, asset.path].filter(Boolean);
+  const references = [];
+  for (const other of parseRegistry()) {
+    if (other.id === id) continue;
+    const haystack = JSON.stringify(other);
+    if (needle.some(value => haystack.includes(value))) references.push({ id: other.id, type: other.type || other.section, via: 'registry' });
+  }
+  const fileRefs = [];
+  walk(vaultRoot, file => {
+    if (file.includes('/.git/')) return;
+    const rel = path.relative(vaultRoot, file).split(path.sep).join('/');
+    if (rel === asset.path || rel === 'package-lock.json') return;
+    const text = safeRead(file);
+    if (needle.some(value => value && text.includes(value))) fileRefs.push(rel);
+  });
+  return { asset: assetRecord({ ...asset, reason: 'impact target' }), registryReferences: references, fileReferences: [...new Set(fileRefs)].sort() };
+}
+
+function printImpact(id) {
+  const report = impactReport(id);
+  if (outputJson) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  console.log(`# Impact: ${report.asset.id}`);
+  console.log(`Path: ${report.asset.path}`);
+  console.log(`Visibility: ${report.asset.visibility}`);
+  console.log('\n## Registry references');
+  if (!report.registryReferences.length) console.log('- none');
+  for (const ref of report.registryReferences) console.log(`- ${ref.id} (${ref.type}) via ${ref.via}`);
+  console.log('\n## File references');
+  if (!report.fileReferences.length) console.log('- none');
+  for (const ref of report.fileReferences) console.log(`- ${ref}`);
+}
+
+function renderMap() {
+  const assets = parseRegistry().filter(asset => asset.path);
+  const lines = ['```mermaid', 'graph TD'];
+  const sectionIds = new Set();
+  for (const asset of assets) {
+    const section = asset.section || 'assets';
+    if (!sectionIds.has(section)) {
+      lines.push(`  ${section}["${section}"]`);
+      sectionIds.add(section);
+    }
+    const node = asset.id.replace(/[^A-Za-z0-9_]/g, '_');
+    lines.push(`  ${node}["${asset.id}<br/>${asset.scope || 'scope?'} / ${asset.visibility || 'visibility?'}"]`);
+    lines.push(`  ${section} --> ${node}`);
+    const match = asset.match || {};
+    for (const dep of [...(match.dependencies || []), ...(match.frameworks || []), ...(match.languages || [])]) {
+      const depNode = `match_${String(dep).replace(/[^A-Za-z0-9_]/g, '_')}`;
+      lines.push(`  ${depNode}["${dep}"] --> ${node}`);
+    }
+  }
+  lines.push('```');
+  console.log(lines.join('\n'));
+}
+
+function syncProject(project) {
+  if (dryRun) {
+    console.log(`# Sync dry-run: ${project.name}`);
+    console.log('- Would run: git pull --ff-only in vault root');
+    console.log('- Would run: npm run validate');
+    console.log('- Would run: ai-vault claim <project>');
+    console.log('- Would run: ai-vault status <project>');
+    return;
+  }
+  const before = git('rev-parse HEAD', vaultRoot);
+  const pull = git('pull --ff-only', vaultRoot);
+  if (pull) console.log(pull);
+  const after = git('rev-parse HEAD', vaultRoot);
+  console.log(`Vault revision: ${before || 'unknown'} -> ${after || 'unknown'}`);
+  validate();
+  claim(project);
+  printStatus(project);
+}
+
 function validate() {
   const required = ['README.md', 'VAULT_PROTOCOL.md', 'registry.yaml', 'skills/vault-maintainer/SKILL.md'];
   const missing = required.filter(p => !exists(path.join(vaultRoot, p)));
@@ -381,7 +563,7 @@ function validate() {
   const suspicious = [];
   const pkgPath = path.join(vaultRoot, 'package.json');
   const pkg = exists(pkgPath) ? readJson(pkgPath) : {};
-  const requiredScripts = ['scan', 'claim', 'export', 'summarize', 'context', 'validate'];
+  const requiredScripts = ['scan', 'claim', 'export', 'summarize', 'context', 'status', 'sync', 'list-assets', 'asset', 'impact', 'map', 'validate'];
   for (const script of requiredScripts) {
     if (!pkg.scripts?.[script]?.includes(`ai-vault.js ${script}`)) failures.push(`package.json missing usable "${script}" script`);
   }
@@ -439,7 +621,7 @@ function walk(dir, cb) {
 }
 
 function help() {
-  console.log(`AI Memory Vault CLI\n\nUsage:\n  ai-vault scan [project]\n  ai-vault claim [project] [--dry-run]\n  ai-vault export [project] [--project-id id] [--dry-run]\n  ai-vault summarize [project] [--project-id id] [--text text] [--dry-run]\n  ai-vault context [project] [--project-id id]\n  ai-vault validate\n`);
+  console.log(`AI Memory Vault CLI\n\nUsage:\n  ai-vault scan [project]\n  ai-vault claim [project] [--dry-run]\n  ai-vault export [project] [--project-id id] [--dry-run]\n  ai-vault summarize [project] [--project-id id] [--text text] [--dry-run]\n  ai-vault context [project] [--project-id id]\n  ai-vault status [project] [--json]\n  ai-vault sync [project] [--dry-run]\n  ai-vault list-assets [--json]\n  ai-vault asset <id> [--json]\n  ai-vault impact <id> [--json]\n  ai-vault map\n  ai-vault validate\n`);
 }
 
 if (command === 'scan') printScan(detectProject(target));
@@ -447,5 +629,11 @@ else if (command === 'claim') claim(detectProject(target));
 else if (command === 'export') exportDraft(detectProject(target));
 else if (command === 'summarize') summarizeProposal(detectProject(target));
 else if (command === 'context') renderContext(detectProject(target));
+else if (command === 'status') printStatus(detectProject(target));
+else if (command === 'sync') syncProject(detectProject(target));
+else if (command === 'list-assets') listAssets();
+else if (command === 'asset') printAsset(targetArg);
+else if (command === 'impact') printImpact(targetArg);
+else if (command === 'map') renderMap();
 else if (command === 'validate') validate();
 else help();

@@ -13,7 +13,13 @@
     "summarize": "node scripts/ai-vault.js summarize",
     "context": "node scripts/ai-vault.js context",
     "validate": "node scripts/ai-vault.js validate",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "status": "node scripts/ai-vault.js status",
+    "sync": "node scripts/ai-vault.js sync",
+    "list-assets": "node scripts/ai-vault.js list-assets",
+    "asset": "node scripts/ai-vault.js asset",
+    "impact": "node scripts/ai-vault.js impact",
+    "map": "node scripts/ai-vault.js map"
   },
   "keywords": [
     "claude-code",

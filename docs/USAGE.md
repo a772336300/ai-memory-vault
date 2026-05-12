@@ -48,6 +48,37 @@ Generate compact startup context for an agent:
 ai-vault context /path/to/project
 ```
 
+Check whether a project's local claimed assets are fresh:
+
+```bash
+ai-vault status /path/to/project
+ai-vault status /path/to/project --json
+```
+
+Recover a project from the GitHub-backed vault on a new machine:
+
+```bash
+git pull --ff-only
+ai-vault sync /path/to/project
+```
+
+Preview first:
+
+```bash
+ai-vault sync /path/to/project --dry-run
+```
+
+## Explore the asset graph
+
+```bash
+ai-vault list-assets
+ai-vault asset vault-maintainer
+ai-vault impact vault-maintainer
+ai-vault map
+```
+
+These commands are inspired by GitNexus-style progressive disclosure and impact analysis: list the graph, read one asset, inspect references, and render a Mermaid map.
+
 ## Validate the vault
 
 ```bash
@@ -55,7 +86,7 @@ npm test
 npm run validate
 ```
 
-Tests cover scan, registry-driven claim, memory marker preservation, export registry updates, context output, summarize proposal staging, and validation failure cases. Validation checks required files, registry paths, scopes/visibility, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
+Tests cover scan, registry-driven claim, memory marker preservation, export registry updates, context output, summarize proposal staging, status freshness/staleness, asset progressive disclosure, impact/map output, sync dry-run, and validation failure cases. Validation checks required files, registry paths, scopes/visibility, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
 ## Restore on a new computer
 

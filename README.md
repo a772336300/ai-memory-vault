@@ -21,6 +21,11 @@ ai-vault claim /path/to/project --dry-run
 ai-vault export /path/to/project --project-id my-project
 ai-vault summarize /path/to/project --text "short session summary"
 ai-vault context /path/to/project
+ai-vault status /path/to/project
+ai-vault sync /path/to/project --dry-run
+ai-vault list-assets
+ai-vault impact vault-maintainer
+ai-vault map
 ai-vault validate
 ```
 
@@ -55,6 +60,10 @@ or:
 - `export` creates `projects/<project-id>/` from templates and adds a matching private `project:<project-id>` entry to `registry.yaml`.
 - `summarize` stages a non-destructive proposal in `inbox/proposals/` and a session summary in `inbox/session-summaries/`.
 - `context` prints compact startup context for any agent without loading full assets.
+- `status` compares a project's claim manifest with current vault asset hashes and reports fresh/stale/missing/visibility changes.
+- `sync` runs the Git-backed recovery loop: pull vault, validate, claim into project, then print status (`--dry-run` previews only).
+- `list-assets` and `asset <id>` provide progressive disclosure primitives.
+- `impact <asset-id>` and `map` expose lightweight asset graph relationships inspired by GitNexus.
 - `validate` checks required vault files, registry paths, scopes/visibility, required CLI scripts/bin wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
 ## Safety model

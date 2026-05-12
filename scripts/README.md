@@ -6,6 +6,12 @@
   - `export`: create a project memory draft and private registry entry.
   - `summarize`: stage a non-destructive proposal and session summary in `inbox/`.
   - `context`: print compact startup context for an agent.
+  - `status`: compare local claimed asset hashes with current vault assets.
+  - `sync`: run pull + validate + claim + status for a target project.
+  - `list-assets`: list registry assets with hashes and visibility.
+  - `asset`: print one asset by id.
+  - `impact`: show registry/file references for an asset.
+  - `map`: render a Mermaid asset graph.
   - `validate`: check vault structure, registry paths, scopes/visibility, CLI wiring, skill metadata, GitHub validation wiring, and obvious secrets.
 - `bootstrap-claude-code.sh` — installs the global vault maintainer skill into Claude Code.
 

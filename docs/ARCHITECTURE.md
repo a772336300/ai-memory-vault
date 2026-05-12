@@ -29,6 +29,10 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
    - `export`: create a draft project memory directory and private registry entry.
    - `summarize`: stage a non-destructive proposal and paired session summary in `inbox/`.
    - `context`: print compact startup context for an agent without loading full assets.
+   - `status`: compare project claim manifests with current vault asset hashes.
+   - `sync`: perform the Git-backed recovery loop: pull, validate, claim, status.
+   - `list-assets` / `asset`: progressive disclosure over vault assets.
+   - `impact` / `map`: lightweight asset graph inspection inspired by GitNexus.
    - `validate`: check required files, registry paths, scopes/visibility, CLI wiring, skill metadata, GitHub workflow wiring, and obvious secret patterns.
    - `test`: exercise scan, claim, export, and validation failure behavior.
 
@@ -39,6 +43,22 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
 7. **GitHub workflow** — `.github/workflows/validate.yml`
    - Runs `npm run validate` on push and pull request.
    - Keeps the vault cloneable and usable from GitHub without extra services.
+
+## Git-backed Memory OS workflow
+
+The vault is the source of truth; local agent memory is a projection.
+
+```text
+GitHub vault
+  → ai-vault sync / claim
+local project .claude/MEMORY.md + .claude/skills
+  → ai-vault summarize
+inbox proposal
+  → AI review + promote
+GitHub vault
+```
+
+This avoids syncing raw Claude/Codex caches directly while preserving portable working memory.
 
 ## Why GitHub
 
