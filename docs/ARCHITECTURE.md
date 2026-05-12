@@ -11,6 +11,7 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
 2. **Registry** — `registry.yaml`
    - Machine-readable index for assets.
    - Drives deterministic matching by files, dependencies, frameworks, languages, packages, aliases, remotes, and explicit `always` rules.
+   - Carries `scope` and `visibility` metadata so private project memory can be separated from public reusable assets.
 
 3. **Assets**
    - `global/`: global preferences and standards.
@@ -25,11 +26,17 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
 5. **Helper CLI** — `scripts/ai-vault.js`
    - `scan`: detect project identity and stack.
    - `claim`: install matched skills, write a compact project memory marker, and record claimed asset hashes.
-   - `export`: create a draft project memory directory and registry entry.
-   - `validate`: check required files, registry paths, CLI wiring, skill metadata, GitHub workflow wiring, and obvious secret patterns.
+   - `export`: create a draft project memory directory and private registry entry.
+   - `summarize`: stage a non-destructive proposal and paired session summary in `inbox/`.
+   - `context`: print compact startup context for an agent without loading full assets.
+   - `validate`: check required files, registry paths, scopes/visibility, CLI wiring, skill metadata, GitHub workflow wiring, and obvious secret patterns.
    - `test`: exercise scan, claim, export, and validation failure behavior.
 
-6. **GitHub workflow** — `.github/workflows/validate.yml`
+6. **Inbox** — `inbox/proposals/` and `inbox/session-summaries/`
+   - Stages uncertain or newly extracted knowledge before promotion into canonical vault assets.
+   - Keeps summarization non-destructive and reviewable.
+
+7. **GitHub workflow** — `.github/workflows/validate.yml`
    - Runs `npm run validate` on push and pull request.
    - Keeps the vault cloneable and usable from GitHub without extra services.
 

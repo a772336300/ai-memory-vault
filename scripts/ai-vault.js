@@ -11,6 +11,7 @@ const targetArg = firstPositionalAfterCommand();
 const target = path.resolve(targetArg || cwd);
 const dryRun = args.includes('--dry-run');
 const projectIdArg = valueAfter('--project-id');
+const textArg = valueAfter('--text');
 
 const vaultRoot = findVaultRoot(cwd);
 
@@ -20,7 +21,7 @@ function valueAfter(flag) {
 }
 
 function firstPositionalAfterCommand() {
-  const flagsWithValues = new Set(['--project-id']);
+  const flagsWithValues = new Set(['--project-id', '--text']);
   for (let i = 1; i < args.length; i += 1) {
     const arg = args[i];
     if (arg.startsWith('--')) {
@@ -195,6 +196,7 @@ function assetRecord(asset) {
     reason: asset.reason,
     path: asset.path,
     scope: asset.scope || null,
+    visibility: asset.visibility || 'unspecified',
     tags: asset.tags || [],
     sha256: sha256(text),
     shortHash: shortHash(text)
@@ -223,7 +225,7 @@ function claim(project) {
     `Source vault: ${vaultRoot}\n`,
     `Claimed at: ${record.claimedAt}\n`,
     '## Claimed assets\n',
-    ...assets.map(m => `- ${m.id} (${m.type}, ${m.shortHash}): ${m.reason} — ${m.path}\n`),
+    ...assets.map(m => `- ${m.id} (${m.type}, ${m.scope || 'scope?'}, ${m.visibility}, ${m.shortHash}): ${m.reason} — ${m.path}\n`),
     '\n## How to use\n',
     '- Treat `.ai-memory/claimed-assets.json` as the authoritative claim manifest.\n',
     '- Read referenced vault files on demand instead of duplicating large memory blocks.\n'
@@ -272,6 +274,7 @@ function ensureProjectRegistryEntry(project) {
     `    title: ${project.name}`,
     `    path: projects/${project.name}`,
     '    scope: project',
+    '    visibility: private',
     `    tags: [${tags.join(', ')}]`,
     '    match:',
     `      aliases: [${project.name}]`,
@@ -287,6 +290,90 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+
+function renderContext(project) {
+  const assets = matchAssets(project).map(assetRecord);
+  const projectMemoryDir = path.join(vaultRoot, 'projects', project.name);
+  const lines = [
+    '# AI Memory Vault Context',
+    '',
+    `Project: ${project.name}`,
+    `Path: ${project.path}`,
+    `Remote: ${project.remote || 'unknown'}`,
+    `Package: ${project.packageName || 'unknown'}`,
+    `Languages: ${project.languages.join(', ') || 'unknown'}`,
+    `Frameworks: ${project.frameworks.join(', ') || 'unknown'}`,
+    '',
+    '## Relevant assets',
+    ...assets.map(asset => `- ${asset.id} (${asset.type}, ${asset.scope || 'scope?'}, ${asset.visibility}, ${asset.shortHash}) — ${asset.path}`),
+    '',
+    '## Usage instructions',
+    '- Read only the referenced assets you need for the current task.',
+    '- Treat this output as a compact startup context, not as the full memory corpus.',
+    '- Do not copy secrets into the vault; stage uncertain material as a proposal first.'
+  ];
+  if (exists(projectMemoryDir)) {
+    lines.push('', '## Project memory files', ...fs.readdirSync(projectMemoryDir).sort().map(file => `- projects/${project.name}/${file}`));
+  }
+  console.log(lines.join('\n'));
+}
+
+function summarizeProposal(project) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const proposalDir = path.join(vaultRoot, 'inbox', 'proposals');
+  const proposalPath = path.join(proposalDir, `${timestamp}-${project.name}.md`);
+  const sessionDir = path.join(vaultRoot, 'inbox', 'session-summaries');
+  const sessionPath = path.join(sessionDir, `${timestamp}-${project.name}.md`);
+  const agentFiles = ['CLAUDE.md', 'AGENTS.md', '.claude', '.cursor', '.codex'].filter(name => exists(path.join(project.path, name)));
+  const importantFiles = project.files.filter(file => /^(README|package.json|pyproject.toml|go.mod|Cargo.toml|Dockerfile|docker-compose)/i.test(file));
+  const body = [
+    `# Summarize Proposal: ${project.name}`,
+    '',
+    'Status: proposed',
+    'Visibility: private',
+    `Created: ${new Date().toISOString()}`,
+    '',
+    '## Detected identity',
+    `- Project ID: ${project.name}`,
+    `- Path: ${project.path}`,
+    `- Git remote: ${project.remote || 'unknown'}`,
+    `- Package/app name: ${project.packageName || 'unknown'}`,
+    `- Languages: ${project.languages.join(', ') || 'unknown'}`,
+    `- Frameworks: ${project.frameworks.join(', ') || 'unknown'}`,
+    '',
+    '## Candidate source files',
+    ...(importantFiles.length ? importantFiles.map(file => `- ${file}`) : ['- none detected']),
+    '',
+    '## Agent memory/config files detected',
+    ...(agentFiles.length ? agentFiles.map(file => `- ${file}`) : ['- none detected']),
+    '',
+    '## AI extraction checklist',
+    '- [ ] Project facts and purpose',
+    '- [ ] Architecture decisions and reasons',
+    '- [ ] Verified setup/run/test/deploy commands',
+    '- [ ] Known mistakes, root causes, and fixes',
+    '- [ ] Reusable patterns or skills worth promoting',
+    '- [ ] Sensitive/private content reviewed and redacted',
+    '',
+    '## Proposed durable memory',
+    '',
+    textArg || '_AI should fill this from inspected project evidence before promotion._',
+    '',
+    '## Promotion target',
+    `- projects/${project.name}/`,
+    '- registry.yaml project entry with `visibility: private` by default'
+  ].join('\n');
+
+  if (dryRun) {
+    console.log(body);
+    return;
+  }
+  writeFile(proposalPath, `${body}\n`);
+  writeFile(sessionPath, `# Session Summary: ${project.name}\n\nCreated: ${new Date().toISOString()}\n\nStaged proposal: ${path.relative(vaultRoot, proposalPath)}\n\n${textArg || '_No session summary text provided._'}\n`);
+  console.log(`Created summarize proposal at ${path.relative(vaultRoot, proposalPath)}`);
+  console.log(`Created session summary at ${path.relative(vaultRoot, sessionPath)}`);
+}
+
 function validate() {
   const required = ['README.md', 'VAULT_PROTOCOL.md', 'registry.yaml', 'skills/vault-maintainer/SKILL.md'];
   const missing = required.filter(p => !exists(path.join(vaultRoot, p)));
@@ -294,7 +381,7 @@ function validate() {
   const suspicious = [];
   const pkgPath = path.join(vaultRoot, 'package.json');
   const pkg = exists(pkgPath) ? readJson(pkgPath) : {};
-  const requiredScripts = ['scan', 'claim', 'export', 'validate'];
+  const requiredScripts = ['scan', 'claim', 'export', 'summarize', 'context', 'validate'];
   for (const script of requiredScripts) {
     if (!pkg.scripts?.[script]?.includes(`ai-vault.js ${script}`)) failures.push(`package.json missing usable "${script}" script`);
   }
@@ -302,6 +389,13 @@ function validate() {
 
   for (const registryPath of registryPaths()) {
     if (!exists(path.join(vaultRoot, registryPath))) failures.push(`registry path does not exist: ${registryPath}`);
+  }
+  const validScopes = new Set(['global', 'project', 'team', 'user', 'both']);
+  const validVisibility = new Set(['public', 'private', 'internal', 'secret-ref']);
+  for (const asset of parseRegistry()) {
+    if (asset.scope && !validScopes.has(asset.scope)) failures.push(`invalid scope for ${asset.id}: ${asset.scope}`);
+    if (!asset.visibility) failures.push(`missing visibility for ${asset.id}`);
+    else if (!validVisibility.has(asset.visibility)) failures.push(`invalid visibility for ${asset.id}: ${asset.visibility}`);
   }
   for (const skill of ['skills/vault-maintainer', 'skills/claude-code-memory']) {
     if (!exists(path.join(vaultRoot, skill, 'SKILL.md'))) failures.push(`missing ${skill}/SKILL.md`);
@@ -345,11 +439,13 @@ function walk(dir, cb) {
 }
 
 function help() {
-  console.log(`AI Memory Vault CLI\n\nUsage:\n  ai-vault scan [project]\n  ai-vault claim [project] [--dry-run]\n  ai-vault export [project] [--project-id id] [--dry-run]\n  ai-vault validate\n`);
+  console.log(`AI Memory Vault CLI\n\nUsage:\n  ai-vault scan [project]\n  ai-vault claim [project] [--dry-run]\n  ai-vault export [project] [--project-id id] [--dry-run]\n  ai-vault summarize [project] [--project-id id] [--text text] [--dry-run]\n  ai-vault context [project] [--project-id id]\n  ai-vault validate\n`);
 }
 
 if (command === 'scan') printScan(detectProject(target));
 else if (command === 'claim') claim(detectProject(target));
 else if (command === 'export') exportDraft(detectProject(target));
+else if (command === 'summarize') summarizeProposal(detectProject(target));
+else if (command === 'context') renderContext(detectProject(target));
 else if (command === 'validate') validate();
 else help();

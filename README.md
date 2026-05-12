@@ -19,6 +19,8 @@ npm link
 ai-vault scan /path/to/project
 ai-vault claim /path/to/project --dry-run
 ai-vault export /path/to/project --project-id my-project
+ai-vault summarize /path/to/project --text "short session summary"
+ai-vault context /path/to/project
 ai-vault validate
 ```
 
@@ -49,8 +51,10 @@ or:
 
 - `scan` prints detected project identity, remote, package name, languages, frameworks, and dependencies as JSON.
 - `claim` reads `registry.yaml`, matches assets by `match.always`, files, dependencies, frameworks, languages, packages, aliases, and remotes, then writes `.ai-memory/claimed-assets.json` with asset hashes, installs matched skills under `.claude/skills/`, and writes a compact marked `.claude/MEMORY.md` claim block.
-- `export` creates `projects/<project-id>/` from templates and adds a matching `project:<project-id>` entry to `registry.yaml`.
-- `validate` checks required vault files, registry paths, required CLI scripts/bin wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
+- `export` creates `projects/<project-id>/` from templates and adds a matching private `project:<project-id>` entry to `registry.yaml`.
+- `summarize` stages a non-destructive proposal in `inbox/proposals/` and a session summary in `inbox/session-summaries/`.
+- `context` prints compact startup context for any agent without loading full assets.
+- `validate` checks required vault files, registry paths, scopes/visibility, required CLI scripts/bin wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
 ## Safety model
 

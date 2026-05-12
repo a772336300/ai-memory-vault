@@ -12,7 +12,15 @@ Optional helper:
 ai-vault export /path/to/project --project-id my-project
 ```
 
-The helper creates `projects/<project-id>/` from templates and registers the project in `registry.yaml`. An AI should refine the generated draft before relying on it.
+The helper creates `projects/<project-id>/` from templates and registers the project in `registry.yaml` with `visibility: private` by default. An AI should refine the generated draft before relying on it.
+
+For non-destructive staging, prefer:
+
+```bash
+ai-vault summarize /path/to/project --text "short session summary"
+```
+
+This writes a proposal under `inbox/proposals/` and a paired session summary under `inbox/session-summaries/` without changing canonical project memory.
 
 ## Claim vault assets into current project
 
@@ -34,6 +42,12 @@ Preview without writing:
 ai-vault claim /path/to/project --dry-run
 ```
 
+Generate compact startup context for an agent:
+
+```bash
+ai-vault context /path/to/project
+```
+
 ## Validate the vault
 
 ```bash
@@ -41,7 +55,7 @@ npm test
 npm run validate
 ```
 
-Tests cover scan, registry-driven claim, memory marker preservation, export registry updates, and validation failure cases. Validation checks required files, registry paths, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
+Tests cover scan, registry-driven claim, memory marker preservation, export registry updates, context output, summarize proposal staging, and validation failure cases. Validation checks required files, registry paths, scopes/visibility, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
 ## Restore on a new computer
 

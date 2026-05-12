@@ -10,6 +10,8 @@
     "scan": "node scripts/ai-vault.js scan",
     "claim": "node scripts/ai-vault.js claim",
     "export": "node scripts/ai-vault.js export",
+    "summarize": "node scripts/ai-vault.js summarize",
+    "context": "node scripts/ai-vault.js context",
     "validate": "node scripts/ai-vault.js validate",
     "test": "node --test tests/*.test.js"
   },

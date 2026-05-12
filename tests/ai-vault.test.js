@@ -96,6 +96,51 @@ test('export registers a project in registry', () => {
   }
 });
 
+
+
+test('context prints compact startup context with matched asset hashes', () => {
+  const root = tempDir();
+  const project = path.join(root, 'context-app');
+  fs.mkdirSync(project);
+  writeJson(path.join(project, 'package.json'), { name: 'context-app', dependencies: {} });
+
+  const output = run(['context', project]);
+  assert.match(output, /AI Memory Vault Context/);
+  assert.match(output, /Relevant assets/);
+  assert.match(output, /global-instructions/);
+  assert.match(output, /public/);
+});
+
+test('summarize creates non-destructive proposal and session summary inbox entries', () => {
+  const root = tempDir();
+  const project = path.join(root, 'summary-app');
+  fs.mkdirSync(project);
+  writeJson(path.join(project, 'package.json'), { name: 'summary-app', dependencies: {} });
+  fs.writeFileSync(path.join(project, 'README.md'), '# Summary App\n');
+
+  const beforeProposals = new Set(fs.readdirSync(path.join(repoRoot, 'inbox', 'proposals')));
+  const beforeSessions = new Set(fs.readdirSync(path.join(repoRoot, 'inbox', 'session-summaries')));
+  try {
+    const output = run(['summarize', project, '--text', 'Verified lesson: keep proposal first.']);
+    assert.match(output, /Created summarize proposal/);
+    const proposals = fs.readdirSync(path.join(repoRoot, 'inbox', 'proposals')).filter(file => !beforeProposals.has(file));
+    const sessions = fs.readdirSync(path.join(repoRoot, 'inbox', 'session-summaries')).filter(file => !beforeSessions.has(file));
+    assert.equal(proposals.length, 1);
+    assert.equal(sessions.length, 1);
+    const proposal = fs.readFileSync(path.join(repoRoot, 'inbox', 'proposals', proposals[0]), 'utf8');
+    assert.match(proposal, /Status: proposed/);
+    assert.match(proposal, /Visibility: private/);
+    assert.match(proposal, /Verified lesson/);
+  } finally {
+    for (const file of fs.readdirSync(path.join(repoRoot, 'inbox', 'proposals'))) {
+      if (!beforeProposals.has(file)) fs.rmSync(path.join(repoRoot, 'inbox', 'proposals', file), { force: true });
+    }
+    for (const file of fs.readdirSync(path.join(repoRoot, 'inbox', 'session-summaries'))) {
+      if (!beforeSessions.has(file)) fs.rmSync(path.join(repoRoot, 'inbox', 'session-summaries', file), { force: true });
+    }
+  }
+});
+
 test('validate fails for broken registry path and obvious secret', () => {
   const root = tempDir();
   const vault = path.join(root, 'vault');

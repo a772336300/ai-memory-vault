@@ -41,10 +41,11 @@ Process:
    - known bugs and fixes
    - reusable workflows
    - reusable skills
-4. Write structured files under `projects/<project-id>/`.
-5. Update `registry.yaml`.
-6. Run `node scripts/ai-vault.js validate`.
-7. Commit with a conventional commit.
+4. For uncertain or newly extracted material, first stage a non-destructive proposal with `ai-vault summarize <project>` under `inbox/proposals/`.
+5. Promote reviewed durable knowledge into structured files under `projects/<project-id>/`.
+6. Update `registry.yaml` with correct `scope` and `visibility` metadata.
+7. Run `node scripts/ai-vault.js validate`.
+8. Commit with a conventional commit.
 
 ### B. Vault → Project: claim and install
 
@@ -148,7 +149,8 @@ Each asset should include:
 - `title`
 - `tags`
 - `path`
-- `scope`: `global`, `project`, or `both`
+- `scope`: `global`, `project`, `team`, `user`, or `both`
+- `visibility`: `public`, `private`, `internal`, or `secret-ref`
 - `match`: files/dependencies/remotes/aliases when relevant
 
 ## 7. Recommended user commands
@@ -161,3 +163,12 @@ Users can simply say:
 - "Create or update a skill from the reusable workflow we just verified."
 
 The AI should execute the workflow directly instead of asking the user to run commands, unless credentials or irreversible external actions are required.
+
+## 8. Inbox and proposal rules
+
+Use `inbox/proposals/` and `inbox/session-summaries/` for staging.
+
+- Proposals are non-destructive and reviewable.
+- Do not promote raw transcripts.
+- Mark private project memory as `visibility: private` by default.
+- Promote only verified, durable knowledge into canonical `projects/`, `patterns/`, or `skills/` files.

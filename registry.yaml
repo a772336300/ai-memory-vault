@@ -10,6 +10,7 @@ global_assets:
     title: Global AI instructions
     path: global/instructions.md
     scope: global
+    visibility: public
     tags: [agent, instructions, behavior]
     match:
       always: true
@@ -18,6 +19,7 @@ global_assets:
     title: Coding style and verification rules
     path: global/coding-style.md
     scope: both
+    visibility: public
     tags: [coding, testing, quality]
     match:
       always: true
@@ -26,6 +28,7 @@ global_assets:
     title: User preferences
     path: global/user-preferences.md
     scope: global
+    visibility: private
     tags: [preferences, user]
 
 skills:
@@ -34,6 +37,7 @@ skills:
     title: AI Memory Vault Maintainer
     path: skills/vault-maintainer/SKILL.md
     scope: global
+    visibility: public
     tags: [vault, memory, sync, claim, export]
     match:
       always: true
@@ -43,6 +47,7 @@ skills:
     title: Claude Code memory migration and claiming
     path: skills/claude-code-memory/SKILL.md
     scope: both
+    visibility: public
     tags: [claude-code, memory, migration]
     match:
       files: [CLAUDE.md, .claude]
@@ -53,6 +58,7 @@ patterns:
     title: Debugging patterns
     path: patterns/debugging/README.md
     scope: both
+    visibility: public
     tags: [debugging, bugs]
     match:
       languages: [javascript, python, go, rust, swift]
@@ -61,6 +67,7 @@ patterns:
     title: Deployment patterns
     path: patterns/deployment/README.md
     scope: both
+    visibility: public
     tags: [deploy, docker, ci]
     match:
       files: [Dockerfile, docker-compose.yml, docker-compose.yaml]
