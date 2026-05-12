@@ -10,7 +10,7 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
 
 2. **Registry** — `registry.yaml`
    - Machine-readable index for assets.
-   - Helps agents discover relevant global rules, skills, patterns, and project memory.
+   - Drives deterministic matching by files, dependencies, frameworks, languages, packages, aliases, remotes, and explicit `always` rules.
 
 3. **Assets**
    - `global/`: global preferences and standards.
@@ -24,9 +24,10 @@ AI Memory Vault is intentionally simple: Git is the sync layer; Markdown/YAML ar
 
 5. **Helper CLI** — `scripts/ai-vault.js`
    - `scan`: detect project identity and stack.
-   - `claim`: install matched skills and merge matched memory assets into a project.
+   - `claim`: install matched skills, write a compact project memory marker, and record claimed asset hashes.
    - `export`: create a draft project memory directory and registry entry.
    - `validate`: check required files, registry paths, CLI wiring, skill metadata, GitHub workflow wiring, and obvious secret patterns.
+   - `test`: exercise scan, claim, export, and validation failure behavior.
 
 6. **GitHub workflow** — `.github/workflows/validate.yml`
    - Runs `npm run validate` on push and pull request.

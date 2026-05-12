@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
@@ -47,6 +48,8 @@ function readJson(p) { return JSON.parse(fs.readFileSync(p, 'utf8')); }
 function safeRead(p) { return exists(p) ? fs.readFileSync(p, 'utf8') : ''; }
 function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }
 function writeFile(p, content) { mkdirp(path.dirname(p)); fs.writeFileSync(p, content); }
+function sha256(text) { return crypto.createHash('sha256').update(text).digest('hex'); }
+function shortHash(text) { return sha256(text).slice(0, 12); }
 
 function git(cmd, dir = target) {
   try { return execSync(`git ${cmd}`, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
@@ -84,33 +87,118 @@ function loadRegistryText() {
   return safeRead(path.join(vaultRoot, 'registry.yaml'));
 }
 
+function parseInlineArray(value) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return [];
+  return trimmed.slice(1, -1).split(',').map(item => item.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+}
+
+function parseScalar(value) {
+  const trimmed = value.trim();
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  if (trimmed.startsWith('[')) return parseInlineArray(trimmed);
+  return trimmed.replace(/^['"]|['"]$/g, '');
+}
+
+function parseRegistry() {
+  const assets = [];
+  let section = null;
+  let current = null;
+  let inMatch = false;
+
+  for (const raw of loadRegistryText().split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, '').trimEnd();
+    if (!line.trim()) continue;
+    const top = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
+    if (top && !raw.startsWith(' ')) {
+      section = top[1];
+      current = null;
+      inMatch = false;
+      continue;
+    }
+
+    const item = line.match(/^\s{2}-\s+id:\s*(.+)$/);
+    if (item) {
+      current = { id: parseScalar(item[1]), section, match: {} };
+      assets.push(current);
+      inMatch = false;
+      continue;
+    }
+    if (!current) continue;
+
+    if (/^\s{4}match:\s*$/.test(line)) {
+      inMatch = true;
+      continue;
+    }
+
+    const pair = line.match(/^\s{4}([a-zA-Z_]+):\s*(.+)$/);
+    if (pair && !inMatch) {
+      current[pair[1]] = parseScalar(pair[2]);
+      continue;
+    }
+
+    const matchPair = line.match(/^\s{6}([a-zA-Z_]+):\s*(.+)$/);
+    if (matchPair && inMatch) current.match[matchPair[1]] = parseScalar(matchPair[2]);
+  }
+  return assets;
+}
+
 function registryPaths() {
-  return loadRegistryText()
-    .split(/\r?\n/)
-    .map(line => line.match(/^\s*path:\s*['"]?([^'"\s#]+)['"]?/))
-    .filter(Boolean)
-    .map(match => match[1]);
+  return parseRegistry().map(asset => asset.path).filter(Boolean);
+}
+
+function anyOverlap(a = [], b = []) {
+  return a.some(item => b.includes(item));
+}
+
+function projectHasFile(project, pattern) {
+  if (pattern.endsWith('/**')) return exists(path.join(project.path, pattern.slice(0, -3)));
+  return exists(path.join(project.path, pattern));
+}
+
+function assetReason(asset, project) {
+  const match = asset.match || {};
+  const reasons = [];
+  if (match.always === true) reasons.push('registry match: always');
+  if (Array.isArray(match.files) && match.files.some(file => projectHasFile(project, file))) reasons.push('registry match: files');
+  if (Array.isArray(match.dependencies) && anyOverlap(match.dependencies, project.dependencies)) reasons.push('registry match: dependencies');
+  if (Array.isArray(match.frameworks) && anyOverlap(match.frameworks, project.frameworks)) reasons.push('registry match: frameworks');
+  if (Array.isArray(match.languages) && anyOverlap(match.languages, project.languages)) reasons.push('registry match: languages');
+  if (Array.isArray(match.packages) && project.packageName && match.packages.includes(project.packageName)) reasons.push('registry match: package');
+  if (Array.isArray(match.aliases) && match.aliases.includes(project.name)) reasons.push('registry match: alias');
+  if (Array.isArray(match.remotes) && project.remote && match.remotes.includes(project.remote)) reasons.push('registry match: remote');
+  if (asset.type === 'project' && exists(path.join(vaultRoot, asset.path || ''))) reasons.push('registry match: project memory exists');
+  return reasons.join(', ');
 }
 
 function matchAssets(project) {
-  const registry = loadRegistryText();
-  const matches = [];
-  const add = (id, reason, sourcePath) => matches.push({ id, reason, path: sourcePath });
+  const seen = new Set();
+  return parseRegistry()
+    .filter(asset => asset.path && exists(path.join(vaultRoot, asset.path)))
+    .map(asset => ({ ...asset, reason: assetReason(asset, project) }))
+    .filter(asset => asset.reason)
+    .filter(asset => {
+      if (seen.has(asset.id)) return false;
+      seen.add(asset.id);
+      return true;
+    });
+}
 
-  add('global-instructions', 'global default', 'global/instructions.md');
-  add('coding-style', 'global default', 'global/coding-style.md');
-  add('vault-maintainer', 'vault operations', 'skills/vault-maintainer/SKILL.md');
-
-  if (exists(path.join(project.path, 'CLAUDE.md')) || exists(path.join(project.path, '.claude'))) {
-    add('claude-code-memory', 'project has Claude Code files', 'skills/claude-code-memory/SKILL.md');
-  }
-  if (project.frameworks.includes('docker')) add('deployment-patterns', 'docker/deployment files detected', 'patterns/deployment/README.md');
-  if (project.dependencies.length || project.languages.length) add('debugging-patterns', 'code project detected', 'patterns/debugging/README.md');
-
-  const projectDir = path.join(vaultRoot, 'projects', project.name);
-  if (exists(projectDir)) add(`project:${project.name}`, 'matching project memory directory exists', `projects/${project.name}`);
-
-  return matches;
+function assetRecord(asset) {
+  const source = path.join(vaultRoot, asset.path);
+  const text = safeRead(source);
+  return {
+    id: asset.id,
+    type: asset.type || asset.section,
+    title: asset.title || asset.id,
+    reason: asset.reason,
+    path: asset.path,
+    scope: asset.scope || null,
+    tags: asset.tags || [],
+    sha256: sha256(text),
+    shortHash: shortHash(text)
+  };
 }
 
 function claim(project) {
@@ -118,7 +206,8 @@ function claim(project) {
   const claimDir = path.join(project.path, '.ai-memory');
   const claudeDir = path.join(project.path, '.claude');
   const skillsDir = path.join(claudeDir, 'skills');
-  const record = { claimedAt: new Date().toISOString(), project: project.name, sourceVault: vaultRoot, assets: matches };
+  const assets = matches.map(assetRecord);
+  const record = { claimedAt: new Date().toISOString(), project: project.name, sourceVault: vaultRoot, assets };
 
   if (dryRun) {
     console.log(JSON.stringify(record, null, 2));
@@ -134,28 +223,27 @@ function claim(project) {
     `Source vault: ${vaultRoot}\n`,
     `Claimed at: ${record.claimedAt}\n`,
     '## Claimed assets\n',
-    ...matches.map(m => `- ${m.id}: ${m.reason} (${m.path})\n`)
+    ...assets.map(m => `- ${m.id} (${m.type}, ${m.shortHash}): ${m.reason} — ${m.path}\n`),
+    '\n## How to use\n',
+    '- Treat `.ai-memory/claimed-assets.json` as the authoritative claim manifest.\n',
+    '- Read referenced vault files on demand instead of duplicating large memory blocks.\n'
   ];
 
-  for (const m of matches) {
+  for (const m of assets) {
     const source = path.join(vaultRoot, m.path);
     if (m.path.endsWith('SKILL.md') && exists(source)) {
-      const skillId = m.id.replace(/^skill:/, '');
-      writeFile(path.join(skillsDir, skillId, 'SKILL.md'), safeRead(source));
-    } else if (exists(source) && fs.statSync(source).isFile()) {
-      memoryParts.push(`\n## ${m.id}\n\n`);
-      memoryParts.push(`Source: ${m.path}\n\n`);
-      memoryParts.push(safeRead(source).trim(), '\n');
+      writeFile(path.join(skillsDir, m.id, 'SKILL.md'), safeRead(source));
     }
   }
 
   const memoryPath = path.join(claudeDir, 'MEMORY.md');
   const existing = safeRead(memoryPath);
+  const block = `<!-- AI_MEMORY_VAULT_CLAIM -->\n${memoryParts.join('')}<!-- /AI_MEMORY_VAULT_CLAIM -->`;
   const next = existing.includes('<!-- AI_MEMORY_VAULT_CLAIM -->')
-    ? existing.replace(/<!-- AI_MEMORY_VAULT_CLAIM -->[\s\S]*<!-- \/AI_MEMORY_VAULT_CLAIM -->/m, `<!-- AI_MEMORY_VAULT_CLAIM -->\n${memoryParts.join('')}<!-- /AI_MEMORY_VAULT_CLAIM -->`)
-    : `${existing ? `${existing.trim()}\n\n` : ''}<!-- AI_MEMORY_VAULT_CLAIM -->\n${memoryParts.join('')}<!-- /AI_MEMORY_VAULT_CLAIM -->\n`;
+    ? existing.replace(/<!-- AI_MEMORY_VAULT_CLAIM -->[\s\S]*<!-- \/AI_MEMORY_VAULT_CLAIM -->/m, block)
+    : `${existing ? `${existing.trim()}\n\n` : ''}${block}\n`;
   writeFile(memoryPath, next);
-  console.log(`Claimed ${matches.length} assets into ${project.path}`);
+  console.log(`Claimed ${assets.length} assets into ${project.path}`);
 }
 
 function exportDraft(project) {
@@ -227,6 +315,8 @@ function validate() {
     /\bghp_[A-Za-z0-9_]{20,}\b/,
     /\bsk-[A-Za-z0-9_-]{20,}\b/,
     /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
+    /[?&](access[_-]?token|api[_-]?key|token|secret)=[A-Za-z0-9._~+\/-]{12,}/i,
+    /\b[A-Za-z0-9+/]{48,}={0,2}\b/,
     /(api[_-]?key|token|password|secret)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}/i
   ];
   walk(vaultRoot, file => {

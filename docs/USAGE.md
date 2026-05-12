@@ -26,7 +26,7 @@ Optional helper:
 ai-vault claim /path/to/project
 ```
 
-`claim` installs matched skills under `.claude/skills/`, records the claim in `.ai-memory/claimed-assets.json`, and merges claimed non-skill assets into a marked block in `.claude/MEMORY.md`.
+`claim` matches assets from `registry.yaml`, installs matched skills under `.claude/skills/`, records asset paths and hashes in `.ai-memory/claimed-assets.json`, and writes a compact marked reference block in `.claude/MEMORY.md`.
 
 Preview without writing:
 
@@ -37,10 +37,11 @@ ai-vault claim /path/to/project --dry-run
 ## Validate the vault
 
 ```bash
+npm test
 npm run validate
 ```
 
-Validation checks required files, registry paths, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
+Tests cover scan, registry-driven claim, memory marker preservation, export registry updates, and validation failure cases. Validation checks required files, registry paths, CLI package wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
 ## Restore on a new computer
 

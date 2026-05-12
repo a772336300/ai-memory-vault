@@ -11,12 +11,16 @@ global_assets:
     path: global/instructions.md
     scope: global
     tags: [agent, instructions, behavior]
+    match:
+      always: true
   - id: coding-style
     type: global
     title: Coding style and verification rules
     path: global/coding-style.md
     scope: both
     tags: [coding, testing, quality]
+    match:
+      always: true
   - id: user-preferences
     type: global
     title: User preferences
@@ -32,6 +36,7 @@ skills:
     scope: global
     tags: [vault, memory, sync, claim, export]
     match:
+      always: true
       keywords: [vault, memory, summarize, claim, restore, sync]
   - id: claude-code-memory
     type: skill
@@ -49,11 +54,16 @@ patterns:
     path: patterns/debugging/README.md
     scope: both
     tags: [debugging, bugs]
+    match:
+      languages: [javascript, python, go, rust, swift]
   - id: deployment-patterns
     type: pattern
     title: Deployment patterns
     path: patterns/deployment/README.md
     scope: both
     tags: [deploy, docker, ci]
+    match:
+      files: [Dockerfile, docker-compose.yml, docker-compose.yaml]
+      frameworks: [docker]
 
 projects: []

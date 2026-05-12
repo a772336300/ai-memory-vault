@@ -2,7 +2,7 @@
 
 - `ai-vault.js` — helper CLI:
   - `scan`: inspect project identity and stack.
-  - `claim`: install matched skills and merge matched memory assets into a target project.
+  - `claim`: match assets from `registry.yaml`, install matched skills, write a compact memory marker, and record asset hashes.
   - `export`: create a project memory draft and registry entry.
   - `validate`: check vault structure, registry paths, CLI wiring, skill metadata, GitHub validation wiring, and obvious secrets.
 - `bootstrap-claude-code.sh` — installs the global vault maintainer skill into Claude Code.

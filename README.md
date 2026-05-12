@@ -47,7 +47,7 @@ or:
 ## CLI behavior
 
 - `scan` prints detected project identity, remote, package name, languages, frameworks, and dependencies as JSON.
-- `claim` writes `.ai-memory/claimed-assets.json`, installs matched skills under `.claude/skills/`, and merges claimed non-skill assets into a marked `.claude/MEMORY.md` block.
+- `claim` reads `registry.yaml`, matches assets by `match.always`, files, dependencies, frameworks, languages, packages, aliases, and remotes, then writes `.ai-memory/claimed-assets.json` with asset hashes, installs matched skills under `.claude/skills/`, and writes a compact marked `.claude/MEMORY.md` claim block.
 - `export` creates `projects/<project-id>/` from templates and adds a matching `project:<project-id>` entry to `registry.yaml`.
 - `validate` checks required vault files, registry paths, required CLI scripts/bin wiring, skill metadata, the GitHub validation workflow, and obvious secret patterns.
 
@@ -62,6 +62,7 @@ The vault stores durable, reusable development knowledge only:
 Run validation before committing:
 
 ```bash
+npm test
 npm run validate
 ```
 
